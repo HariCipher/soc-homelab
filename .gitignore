@@ -1,0 +1,17 @@
+# secrets — never commit
+secrets/*
+!secrets/*.example.md
+
+# VM artifacts
+*.qcow2
+*.iso
+*.vmdk
+
+# raw logs / captures
+*.pcap
+*.log
+evidence/**/raw/
+
+# noise
+.DS_Store
+*.swp

@@ -1,8 +1,10 @@
-# ROADMAP
+# ROADMAP — build plan
 
-Build order is **bottom-up by layer**: L2 → L3 → DNS → service → telemetry →
-detection → response. Every failure in the previous lab was a layer problem, so
-each phase must fully pass before the next begins.
+**Scope: build the platform.** Adversary emulation and hunting practice are deferred
+until every phase below is verified.
+
+Build order is **bottom-up by layer**: L2 → L3 → DNS → SIEM → telemetry → detection
+→ response. Every failure in the previous lab was a layer problem.
 
 **Rule for every step:** one change → one verification → one screenshot → one commit.
 
@@ -10,146 +12,169 @@ each phase must fully pass before the next begins.
 
 ## RAM budget — the hard constraint
 
+Wazuh replaces Splunk, and the Wazuh **Dashboard requires the indexer (OpenSearch)**.
+That is the expensive part, so everything else is trimmed to pay for it.
+
 ```
-Host total        15.0 G
-Host baseline      8.1 G   (desktop + Wazuh manager)
-Available          6.9 G
+Host total                    15.0 G
+Host OS + desktop baseline     ~6.5 G
+Budget for lab + SIEM          ~8.5 G
 ```
 
-| Workload | RAM | Notes |
+| Workload | RAM | Note |
 |---|---|---|
-| pfSense | 1.0 G | Suricata moved to host, so no bump needed |
-| DC01 | 3.0 G | reduced from 4 G |
-| Suricata | ~0.5 G | **on host**, sniffing `virbr-lab` — no VM |
-| n8n | ~0.5 G | host container |
-| Attack tooling | 0 G | **run from the host**, no Kali VM |
-| Honeytokens | 0 G | AD objects, not a machine |
-| Honeypot container | ~0.3 G | optional, host container |
+| pfSense | 1.0 G | Suricata moved to host, so no bump |
+| DC01 | **3.0 G** | reduced from 4 G — Server Core runs fine |
+| Wazuh manager | ~0.5 G | already running |
+| Wazuh indexer | **~1.5 G** | JVM heap **capped at 1 G** — not default |
+| Wazuh dashboard | ~0.6 G | |
+| Suricata | ~0.5 G | on host, sniffs `virbr-lab` |
+| n8n | ~0.5 G | |
+| **Total** | **~7.6 G** | fits, with ~1 G margin |
 
-**Total ≈ 5.3 G of 6.9 G — all six phases fit without a hardware upgrade.**
-A 32 GB upgrade later unlocks: Wazuh Dashboard/indexer, a Windows client VM,
-a dedicated attacker VM, and ELK alongside.
+**Three things make it fit:**
+1. Splunk removed — reclaims 4 GB disk and its memory footprint
+2. DC01 dropped 4 G → 3 G
+3. Indexer JVM heap pinned to 1 G (the default sizing will OOM this host)
+
+**Accept the trade-off:** short log retention. Tune index lifecycle to days, not
+months. A 32 GB upgrade later removes this constraint entirely.
 
 ---
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation BUILDING *(nearly done)*
 
-Prove what already exists actually works today.
+| # | Step | State |
+|---|---|---|
+| 1.1 | pfSense and DC01 booting | yes done |
+| 1.2 | Host address `192.168.50.2/24` on `virbr-lab` | yes set, **not persistent** |
+| 1.3 | Make the host labnet address persistent | |
+| 1.4 | Reduce DC01 memory 4 G → 3 G | |
+| 1.5 | pfSense DHCP scope: DNS `192.168.50.10`, domain `homelab.lan` | |
+| 1.6 | DC01 time sync → pfSense | |
+| 1.7 | **Snapshot both VMs as `healthy`** | **blocking** |
+
+**Exit criteria:** `scripts/verify/01-foundation.sh` exits 0 (11/11).
+Currently 9/11 — only the two snapshot checks fail.
+
+screenshot pfSense dashboard · `Get-ADDomain` output · verify script passing
+
+---
+
+## Phase 2 — SIEM platform (Wazuh)
 
 | # | Step |
 |---|---|
-| 1.1 | Boot pfSense (wait 60 s) |
-| 1.2 | Boot DC01 (wait 90 s) |
-| 1.3 | Give the host an address on labnet — `192.168.50.2/24` on `virbr-lab`, **made persistent** |
-| 1.4 | Make Splunk a systemd service so it survives reboot |
-| 1.5 | pfSense DHCP scope: DNS = `192.168.50.10`, domain = `homelab.lan` |
-| 1.6 | DC01 time sync → pfSense (Kerberos fails on >5 min skew) |
-| 1.7 | Snapshot both VMs as `healthy` — the moment they are clean |
+| 2.1 | Remove Splunk — stop it, uninstall, reclaim `/opt/splunk` |
+| 2.2 | Install Wazuh indexer (single node) |
+| 2.3 | **Cap JVM heap at 1 G** before first start — `-Xms1g -Xmx1g` |
+| 2.4 | Install Wazuh dashboard, point it at the indexer |
+| 2.5 | Connect manager → indexer (filebeat) |
+| 2.6 | Aggressive index lifecycle — short retention |
 
-**Exit criteria** — `scripts/verify/01-foundation.sh` exits 0:
-- pfSense and DC01 both reply to ping, 0% loss
-- pfSense web GUI returns HTTP 200
-- DC01 resolves internal (`dc01.homelab.lan`), external (`archlinux.org`) and AD SRV records
-- `dcdiag /q` produces no output
+**Exit criteria:** dashboard loads over HTTPS, shows the manager, and displays live
+events. Host still has ≥1 GB free with both VMs running.
 
-📸 pfSense dashboard · `Get-ADDomain` output · verify script passing
+screenshot Wazuh dashboard overview · `free -h` proving headroom
 
 ---
 
-## Phase 2 — Telemetry
-
-Get logs off the boxes and into the pipeline.
+## Phase 3 — Telemetry
 
 | # | Step |
 |---|---|
-| 2.1 | Wazuh agent on DC01 → manager `192.168.50.2` (**agent version must match manager**) |
-| 2.2 | Windows advanced audit policy: logon/logoff, **4688** process creation, **4104** PowerShell script block |
-| 2.3 | Sysmon + SwiftOnSecurity config on DC01 |
-| 2.4 | pfSense remote syslog → `192.168.50.2:514` |
-| 2.5 | Splunk ingests `/var/ossec/logs/alerts/alerts.json` → `index=wazuh` |
-| 2.6 | Stand up a **Wazuh web interface** — see `siem/wazuh/README.md` |
+| 3.1 | Wazuh agent on DC01 → manager `192.168.50.2`. **Agent version must match the manager.** |
+| 3.2 | Windows advanced audit policy: logon/logoff, **4688** process creation |
+| 3.3 | PowerShell **4104** script-block logging |
+| 3.4 | Sysmon + SwiftOnSecurity config on DC01 |
+| 3.5 | pfSense remote syslog → `192.168.50.2:514` |
 
-**Exit criteria:** deliberately fail a logon on DC01 → event **4625** visible in
-Wazuh → same event visible in Splunk. One end-to-end test proves the whole layer.
+**Exit criteria:** deliberately fail a logon on DC01 → **event 4625 visible in the
+Wazuh dashboard**. One end-to-end test proves the whole layer.
 
-📸 agent Active · the 4625 alert · a Sysmon process-creation event
+screenshot agent Active · the 4625 alert in the dashboard · a Sysmon process event
 
 ---
 
-## Phase 3 — Detection
+## Phase 4 — Network IDS
 
 | # | Step |
 |---|---|
-| 3.1 | Suricata **on the host**, sniffing `virbr-lab` in promiscuous mode |
-| 3.2 | Tune out false positives — an untuned IDS is noise, not detection |
-| 3.3 | Write custom Wazuh rules for the gaps found |
-| 3.4 | Map every detection to a MITRE ATT&CK technique |
-| 3.5 | Validate each with Atomic Red Team |
+| 4.1 | Suricata on the host, `af-packet` on `virbr-lab`, promiscuous |
+| 4.2 | ET Open ruleset + `suricata-update` |
+| 4.3 | Baseline normal traffic, then tune out false positives |
+| 4.4 | Ship `eve.json` into Wazuh |
 
-**Exit criteria:** ≥5 detections that fire reliably, each mapped to a technique and
-each reproducible by a documented test.
+**Exit criteria:** a deliberate probe from the host to DC01 produces a Suricata alert
+that lands in the Wazuh dashboard. False-positive rate documented.
 
-📸 Suricata alert · MITRE coverage table · a custom rule firing
+screenshot Suricata alert in the dashboard
 
 ---
 
-## Phase 4 — Deception
+## Phase 5 — Detection engineering
 
 | # | Step |
 |---|---|
-| 4.1 | **Honeytokens first** — a decoy AD account and a decoy file share with auditing. Zero RAM, high signal. |
-| 4.2 | Alert on any touch of either |
-| 4.3 | *(optional)* containerised honeypot on labnet, **firewalled off from DC01 first** |
+| 5.1 | Identify gaps the default ruleset misses |
+| 5.2 | Write custom Wazuh rules for them |
+| 5.3 | Map each detection to a MITRE ATT&CK technique |
+| 5.4 | Write a repeatable test per detection |
 
-A honeypot that can reach the domain controller is just a compromised host. The
-isolation rule is written before the honeypot is deployed, never after.
+**Exit criteria:** ≥5 custom detections, each mapped, each with a test that
+reproduces it. **A rule without a test is a guess, not a detection.**
 
-📸 the honeytoken alert firing
+screenshot custom rule firing · MITRE coverage table
 
 ---
 
-## Phase 5 — Automation (n8n SOAR)
+## Phase 6 — Deception (honeytokens)
+
+| # | Step |
+|---|---|
+| 6.1 | Decoy AD account — never used, SPN set, alert on any auth attempt |
+| 6.2 | Decoy file share with object-access auditing |
+| 6.3 | Wazuh rule alerting on either being touched |
+
+Zero RAM, near-zero false positives. A honeypot VM can follow later — and if it
+does, the isolation rule (`HONEYPOT → LAN = BLOCK`) goes in **before** it boots.
+
+screenshot honeytoken alert firing
+
+---
+
+## Phase 7 — Automation (n8n SOAR)
 
 | # | Playbook |
 |---|---|
-| 5.1 | **Enrich** — alert in, IP/hash reputation out |
-| 5.2 | **Notify** — formatted alert to a chat/mail sink |
-| 5.3 | **Contain** — block a source IP on pfSense via its API |
+| 7.1 | **Enrich** — Wazuh alert → IP/hash reputation → annotated result |
+| 7.2 | **Notify** — formatted alert to a chat/mail sink |
+| 7.3 | **Contain** — block a source IP on pfSense via its API |
+
+Triggered from the Wazuh API / active response, not by polling files. Start
+notify-only; add containment once false positives are understood.
 
 **Exit criteria:** one alert travels Wazuh → n8n → action with zero manual steps.
 
-📸 workflow canvas · a successful execution log
+screenshot workflow canvas · a successful execution log
 
 ---
 
-## Phase 6 — Practice (attack → hunt → harden)
+## After the build — practice DEFERRED
 
-Attack tooling runs **from the Arch host**, which already sits on labnet — no
-attacker VM required.
+Attack → hunt → harden, run from the host (no attacker VM needed). Kerberoasting,
+AS-REP roasting, LLMNR poisoning, LDAP enumeration, pass-the-hash. Each becomes an
+investigation writeup in `operations/investigations/`.
 
-| Attack | Hunt it in | Outcome |
-|---|---|---|
-| Kerberoasting | Wazuh · event 4769 | detection rule |
-| AS-REP roasting | Wazuh · audit log | detection rule |
-| LLMNR/NBT-NS poisoning | Suricata | detection rule |
-| BloodHound / LDAP enumeration | LDAP query volume | detection rule |
-| Pass-the-hash | event 4624 logon type 9 | detection rule |
-
-The point is never the attack — it is whether the detection fired. Each one becomes
-a writeup in `operations/investigations/`.
-
-Then harden: CIS baseline on DC01, LAPS, tiered admin — and re-run every attack to
-see what stops working.
+**Not started until Phase 7 is verified.**
 
 ---
 
 ## Documenting
 
-Documentation is not a final phase — it happens inside every phase:
-
 | When | Where |
 |---|---|
 | During work | `lab-journal/YYYY-MM-DD.md` — what I did, what broke |
 | On a verify pass | `STATUS.md` + screenshot in `evidence/` |
-| On a design decision | `docs/decisions.md` — the why, and what was rejected |
+| On a design decision | `docs/decisions.md` |
 | On phase completion | folder README — Design · Verify · Upstream · My changes |

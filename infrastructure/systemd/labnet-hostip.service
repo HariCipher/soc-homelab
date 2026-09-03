@@ -1,0 +1,13 @@
+[Unit]
+Description=Host IP on labnet bridge (SIEM ingestion address)
+After=libvirtd.service network-online.target
+Wants=libvirtd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/ip addr replace 192.168.50.2/24 dev virbr-lab
+ExecStop=/usr/bin/ip addr del 192.168.50.2/24 dev virbr-lab
+
+[Install]
+WantedBy=multi-user.target

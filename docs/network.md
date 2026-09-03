@@ -20,7 +20,7 @@ no path out of it except through pfSense.
 | DC01 | 192.168.50.10 | static |
 | Honeypot (planned) | 192.168.50.20 | isolated from LAN by firewall rule |
 
-## ⚠️ Known gap — host labnet address is not persistent
+## NOTE: Known gap — host labnet address is not persistent
 
 `labnet` has no libvirt-managed IP, so `virbr-lab` comes up with no address. Nothing
 currently assigns `192.168.50.2`. Until this is fixed, the host is unreachable from

@@ -1,6 +1,6 @@
 # Identity — Active Directory & Windows security
 
-**Status:** ⚠️ DEGRADED — see [STATUS.md](../STATUS.md) · **Phases 1 & 2**
+**Status:** DEGRADED — see [STATUS.md](../STATUS.md) · **Phases 1 & 2**
 
 ## Purpose
 DC01 is both the identity provider for the lab and the richest telemetry source in

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wire Wazuh + pfSense logs into Splunk.  Run:  sudo bash setup-forwarding.sh
 set -euo pipefail
-[[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
+[[ $EUID -eq 0 ]] | | { echo "run with sudo"; exit 1; }
 
 SPLUNK=/opt/splunk
 OSSEC=/var/ossec
@@ -53,7 +53,7 @@ TRUNCATE            = 0
 EOF
 
 echo "==> [3/4] Wazuh: enable syslog listener on 514/udp for the lab subnet"
-cp -n "$OSSEC/etc/ossec.conf" "$OSSEC/etc/ossec.conf.bak.$(date +%F)" || true
+cp -n "$OSSEC/etc/ossec.conf" "$OSSEC/etc/ossec.conf.bak.$(date +%F)" | | true
 if grep -q "<connection>syslog</connection>" "$OSSEC/etc/ossec.conf"; then
   echo "    syslog remote block already present - skipping"
 else
@@ -82,8 +82,8 @@ systemctl restart wazuh-manager
 echo
 echo "==> Verify"
 sleep 5
-ss -lun | grep -E ':(514|5514) ' || echo "  !! syslog ports not listening yet"
-ss -ltn | grep -E ':(1514|8000) ' || true
+ss -lun | grep -E ':(514|5514) ' | | echo "  !! syslog ports not listening yet"
+ss -ltn | grep -E ':(1514|8000) ' | | true
 echo
 echo "DONE. Now in pfSense GUI:"
 echo "  Status -> System Logs -> Settings -> Remote Logging"

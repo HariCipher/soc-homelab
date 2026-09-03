@@ -1,6 +1,6 @@
 # Detection engineering
 
-**Status:** 📋 PLANNED · **Phase 3**
+**Status:** PLANNED · **Phase 3**
 
 ## Purpose
 Turn raw telemetry into alerts that fire reliably — and prove each one with a

@@ -11,7 +11,7 @@ The rendered topology diagram lives in the [root README](../README.md).
 | Identity | DC01 (Windows Server 2025 Core) | Active Directory, DNS authority for `homelab.lan` |
 | Telemetry | Wazuh agent, Sysmon, syslog | moves events off endpoints to the manager |
 | Detection | Wazuh rules, Suricata | turns events into alerts |
-| Analysis | Wazuh web UI, Splunk | search, pivot, dashboards |
+| Analysis | Wazuh dashboard (indexer-backed) | search, pivot, ATT&CK views |
 | Response | n8n | enrich, notify, contain |
 
 ## Design principles

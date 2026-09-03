@@ -1,4 +1,4 @@
-# ⚠️ Archive — previous work
+# NOTE: Archive — previous work
 
 **Nothing in this folder is running.** These are earlier labs, kept as a record of
 prior work and as a source of components to migrate into the current build.

@@ -1,6 +1,6 @@
 # Operations
 
-**Status:** 📋 PLANNED
+**Status:** PLANNED
 
 ## Purpose
 Running the lab: routine checks, recovery procedures, and the investigation

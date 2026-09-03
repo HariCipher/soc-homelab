@@ -1,6 +1,6 @@
 # Deception
 
-**Status:** 📋 PLANNED · **Phase 4**
+**Status:** PLANNED · **Phase 4**
 
 ## Purpose
 Alerts with near-zero false positives. Nobody has a legitimate reason to touch a
@@ -15,7 +15,7 @@ decoy — so any hit is real signal.
 
 Then, optionally, a **containerised** honeypot on labnet.
 
-## ⚠️ Containment rule — write it before deploying anything
+## NOTE: Containment rule — write it before deploying anything
 A honeypot that can reach the domain controller is just a compromised host.
 
 ```

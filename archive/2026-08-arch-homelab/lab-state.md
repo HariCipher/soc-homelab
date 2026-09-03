@@ -1,4 +1,4 @@
-> 📦 **ARCHIVED — previous work, not the current environment.**
+> ARCHIVED **ARCHIVED — previous work, not the current environment.**
 > Kept for reference and component migration. Any status claims below
 > reflect 2026-08-08 and are **not** current. Live status: [STATUS.md](../../STATUS.md)
 
@@ -8,14 +8,14 @@
 
 ## Host
 - Arch Linux, KVM/QEMU via libvirt
-- Wazuh manager: running ✓
-- Splunk: running ✓
+- Wazuh manager: running yes
+- Splunk: running yes
 - DNS: broken (can't resolve external hosts)
 
 ## Network
-- labnet (virbr-lab, 192.168.50.0/24): active ✓
-- Host ingestion NIC: 192.168.50.2/24 ✓
-- nftables rules: in place ✓
+- labnet (virbr-lab, 192.168.50.0/24): active yes
+- Host ingestion NIC: 192.168.50.2/24 yes
+- nftables rules: in place yes
 
 ## VMs
 - pfSense: VM doesn't exist yet (ISO download failed due to DNS)

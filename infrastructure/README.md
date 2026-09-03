@@ -1,6 +1,6 @@
 # Infrastructure
 
-**Status:** ⚠️ DEGRADED — see [STATUS.md](../STATUS.md) · **Phase 1**
+**Status:** DEGRADED — see [STATUS.md](../STATUS.md) · **Phase 1**
 
 ## Purpose
 The hypervisor layer: the Arch host, the two libvirt networks, the VM definitions,
@@ -21,7 +21,6 @@ scripts/verify/00-host.sh
 
 ## Open items
 - Host has **no address on `virbr-lab`** and nothing sets it — blocks all log forwarding
-- Splunk has **no systemd unit** — does not survive reboot
 - **No snapshots exist** on either VM
 
 ## Upstream

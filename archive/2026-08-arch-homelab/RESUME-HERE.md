@@ -1,4 +1,4 @@
-> 📦 **ARCHIVED — previous work, not the current environment.**
+> ARCHIVED **ARCHIVED — previous work, not the current environment.**
 > Kept for reference and component migration. Any status claims below
 > reflect 2026-08-08 and are **not** current. Live status: [STATUS.md](../../STATUS.md)
 
@@ -18,8 +18,8 @@
 | VM autostart | **disabled** on both — must start manually |
 | Wazuh manager | active · 1514/1515/55000 · **syslog listener on 514/udp is UP** |
 | Splunk | running · web :8000 |
-| Splunk configs | `indexes.conf`, `inputs.conf`, `props.conf` written ✅ |
-| Splunk UDP :5514 input | ⚠️ **not listening** — needs checking (see below) |
+| Splunk configs | `indexes.conf`, `inputs.conf`, `props.conf` written DONE |
+| Splunk UDP :5514 input | NOTE: **not listening** — needs checking (see below) |
 
 `setup-forwarding.sh` **was run** — Wazuh's 514 listener and all three Splunk
 conf files are in place. Only the 5514 UDP input didn't come up.
@@ -75,7 +75,7 @@ sudo tail -50 /opt/splunk/var/log/splunk/splunkd.log | grep -i udp
 
 ### 2. pfSense remote syslog (GUI, 5 min)
 `Status → System Logs → Settings → Remote Logging`
-- Enable Remote Logging ✅
+- Enable Remote Logging DONE
 - Source Address: **LAN**
 - Remote server 1: `192.168.50.2:514`   ← Wazuh
 - Remote server 2: `192.168.50.2:5514`  ← Splunk

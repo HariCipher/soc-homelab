@@ -1,6 +1,6 @@
 # Automation — SOAR with n8n
 
-**Status:** 📋 PLANNED · **Phase 5**
+**Status:** PLANNED · **Phase 5**
 
 ## Purpose
 Close the loop: an alert should be able to enrich, notify and contain itself

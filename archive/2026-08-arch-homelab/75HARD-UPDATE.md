@@ -1,4 +1,4 @@
-> 📦 **ARCHIVED — previous work, not the current environment.**
+> ARCHIVED **ARCHIVED — previous work, not the current environment.**
 > Kept for reference and component migration. Any status claims below
 > reflect 2026-08-08 and are **not** current. Live status: [STATUS.md](../../STATUS.md)
 
@@ -131,16 +131,16 @@ there's one place to pivot across firewall logs, Windows events, and honeypot hi
 
 | Check | Result |
 |---|---|
-| pfSense + DC01 VMs running | ✅ |
-| pfSense LAN reachable (192.168.50.1) | ✅ 0% loss |
-| pfSense Web GUI | ✅ HTTP 200 |
-| DC01 reachable (192.168.50.10) | ✅ 0% loss |
-| Internal DNS `dc01.homelab.lan` | ✅ → 192.168.50.10 |
-| External DNS via DC (`archlinux.org`) | ✅ → 209.126.35.79 |
-| AD SRV `_ldap._tcp.homelab.lan` | ✅ → 0 100 389 dc01.homelab.lan |
-| AD SRV `_kerberos._tcp.homelab.lan` | ✅ → 0 100 88 dc01.homelab.lan |
-| Wazuh manager | ✅ active, listening 1514/1515/55000 |
-| Splunk | ✅ running, web on :8000 |
+| pfSense + DC01 VMs running | DONE |
+| pfSense LAN reachable (192.168.50.1) | DONE 0% loss |
+| pfSense Web GUI | DONE HTTP 200 |
+| DC01 reachable (192.168.50.10) | DONE 0% loss |
+| Internal DNS `dc01.homelab.lan` | DONE → 192.168.50.10 |
+| External DNS via DC (`archlinux.org`) | DONE → 209.126.35.79 |
+| AD SRV `_ldap._tcp.homelab.lan` | DONE → 0 100 389 dc01.homelab.lan |
+| AD SRV `_kerberos._tcp.homelab.lan` | DONE → 0 100 88 dc01.homelab.lan |
+| Wazuh manager | DONE active, listening 1514/1515/55000 |
+| Splunk | DONE running, web on :8000 |
 
 Those SRV records are the real proof AD is healthy — they're what domain clients use
 to *find* the DC in the first place.

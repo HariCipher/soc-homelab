@@ -1,4 +1,4 @@
-> 📦 **ARCHIVED — previous work, not the current environment.**
+> ARCHIVED **ARCHIVED — previous work, not the current environment.**
 > Kept for reference and component migration. Any status claims below
 > reflect 2026-08-08 and are **not** current. Live status: [STATUS.md](../../STATUS.md)
 

@@ -8,5 +8,6 @@ Copy to `secrets/credentials.md` — that file is gitignored and never committed
 | DC01 | 192.168.50.10 | Administrator | `<REDACTED>` |
 | Wazuh dashboard | https://192.168.50.2/ | admin | `<REDACTED>` |
 | Wazuh API | https://192.168.50.2:55000 | wazuh | `<REDACTED>` |
+| n8n | http://localhost:5678 | admin | `<REDACTED>` |
 
 Lab-only credentials. Never reused anywhere real.

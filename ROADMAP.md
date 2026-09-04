@@ -29,10 +29,11 @@ Budget for lab + SIEM          ~8.5 G
 | Wazuh indexer | **~1.5 G** | JVM heap **capped at 1 G** — not default |
 | Wazuh dashboard | ~0.6 G | |
 | Suricata | ~0.5 G | on host, sniffs `virbr-lab` |
-| **Total** | **~7.6 G** | fits, with ~1 G margin |
+| n8n (SOAR) | ~0.4 G | single Node process, idle most of the time |
+| **Total** | **~7.5 G** | fits, with ~1 G margin |
 
 **Three things make it fit:**
-1. Splunk removed — reclaims 4 GB disk and its memory footprint
+1. Splunk removed — reclaimed 6.2 GB of disk (it was not running, so almost no RAM)
 2. DC01 dropped 4 G → 3 G
 3. Indexer JVM heap pinned to 1 G (the default sizing will OOM this host)
 
@@ -128,12 +129,36 @@ screenshot custom rule firing · MITRE coverage table
 ---
 
 
+## Phase 6 — SOAR automation
+
+| # | Step |
+|---|---|
+| 6.1 | Install n8n on the host |
+| 6.2 | Create a read-only Wazuh API user for n8n |
+| 6.3 | Tier 1 playbook — enrich: on alert, pull agent, rule and recent host history |
+| 6.4 | Tier 2 playbook — notify: format and deliver a readable summary |
+| 6.5 | Wire Wazuh active response to call the n8n webhook |
+| 6.6 | Tier 3 playbook — contain: block a source IP on pfSense, disable an AD account |
+| 6.7 | Write the reverse action for every containment action, and test it |
+
+**Exit criteria:** a detection from Phase 5 fires, n8n enriches it automatically, and
+a containment playbook blocks a test source IP and unblocks it again — both runs
+visible in the n8n execution log.
+
+**Safety rule:** Tier 3 runs only against an explicit target list. Never a wildcard,
+never DC01's Administrator.
+
+screenshot n8n execution log with an enriched alert - pfSense rule created by the playbook
+
+---
+
 ## After the build — practice DEFERRED
 
-Attack → hunt → harden, run from the host (no attacker VM needed). Kerberoasting,
-AS-REP roasting, LLMNR poisoning, LDAP enumeration, pass-the-hash. Each becomes an
+Attack, hunt, harden - run from the host, no attacker VM needed. Kerberoasting,
+AS-REP roasting, LLMNR poisoning, LDAP enumeration, pass-the-hash. Each one becomes
+a detection test that either fires or exposes a gap.
 
-**Not started until Phase 7 is verified.**
+**Not started until Phase 6 is verified.**
 
 ---
 

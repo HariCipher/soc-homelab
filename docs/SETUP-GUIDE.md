@@ -328,3 +328,88 @@ $ sudo /var/ossec/bin/wazuh-logtest      # test a rule against a sample log line
 ≥5 custom detections, each mapped and each with a reproducible test.
 
 ---
+
+## Phase 6 — SOAR automation
+
+You are wiring the last link: alert to action. Everything before this produced
+information; this phase makes the lab do something with it.
+
+**Why n8n and not a shell script.** Wazuh active response can already run a script.
+The problem is that a script leaves no trace of what it did or why. n8n gives you an
+execution log per run, retries, and a diagram you can show someone. See decision 004.
+
+**The order matters, and it is not negotiable.** Build enrich, then notify, then
+contain. Containment is the only thing in this lab that changes state on its own. A
+containment playbook wired to a noisy rule will block your own traffic or disable a
+real account, and you will be debugging the automation instead of the detection.
+
+### 6.1 Install n8n on the host
+
+```bash
+$ sudo pacman -S --needed nodejs npm
+$ sudo npm install -g n8n
+$ n8n start          # first run, then daemonise with a systemd unit
+```
+
+Reachable at http://localhost:5678.
+
+### 6.2 Give n8n a read-only Wazuh API user
+
+Do not let it use the `wazuh` admin account. Create a dedicated user with read
+permissions only, so a mistake in a playbook cannot change manager config.
+
+```bash
+$ curl -sk -u wazuh:<pw> -X POST https://192.168.50.2:55000/security/users \
+    -H 'Content-Type: application/json' \
+    -d '{"username":"n8n","password":"<pw>"}'
+```
+
+Record it in `secrets/credentials.md` (gitignored).
+
+### 6.3 Tier 1 — enrich (no side effects)
+
+Trigger: schedule, every 5 minutes.
+Steps: query the Wazuh API for alerts above level 7, and for each one pull the agent
+name, the rule description and the MITRE technique.
+
+This is the safe place to learn the API shape. Nothing it does can hurt the lab.
+
+### 6.4 Tier 2 — notify
+
+Same trigger, plus a formatting step that produces one readable line per alert.
+Deliver it wherever you actually read things.
+
+### 6.5 Push instead of poll
+
+Add a Webhook node in n8n, then point Wazuh active response at it in
+`/var/ossec/etc/ossec.conf`. Now an alert reaches n8n in a second instead of five
+minutes.
+
+### 6.6 Tier 3 — contain
+
+Two playbooks:
+
+| Playbook | Action | Reverse |
+|---|---|---|
+| Block IP | add the address to a pfSense alias used by a block rule | remove from alias |
+| Disable account | `Disable-ADAccount` on DC01 | `Enable-ADAccount` |
+
+**Write and test the reverse first.** Then test the forward action against a
+throwaway AD account and a source IP you control. Never against Administrator.
+
+### 6.7 Log every action
+
+Every Tier 3 run appends to a file on the host: timestamp, alert ID, target, action,
+result. If you cannot answer "what did the automation do last night" from a file, the
+automation is not finished.
+
+### Phase 6 exit
+
+A Phase 5 detection fires, n8n enriches it automatically, a containment playbook
+blocks a test IP, and the reverse playbook unblocks it. Both visible in the n8n
+execution log.
+
+screenshot `evidence/automation/` — n8n execution log, and the pfSense rule the
+playbook created.
+
+---

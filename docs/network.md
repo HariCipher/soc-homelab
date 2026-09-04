@@ -18,7 +18,6 @@ no path out of it except through pfSense.
 | pfSense LAN | 192.168.50.1 | gateway, DNS forwarder, DHCP server |
 | Arch host on labnet | 192.168.50.2 | log ingestion + management. **Must be set manually — see below** |
 | DC01 | 192.168.50.10 | static |
-| Honeypot (planned) | 192.168.50.20 | isolated from LAN by firewall rule |
 
 ## NOTE: Known gap — host labnet address is not persistent
 

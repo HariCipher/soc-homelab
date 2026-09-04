@@ -21,6 +21,7 @@ flowchart TB
         WZI["Wazuh Indexer<br>OpenSearch"]
         WZD["Wazuh Dashboard<br>web UI"]
         SUR["Suricata<br>sniffs virbr-lab"]
+        N8N["n8n<br>SOAR playbooks"]
     end
 
     subgraph LAB["labnet 192.168.50.0/24 - ISOLATED, no NAT"]
@@ -36,6 +37,8 @@ flowchart TB
     SUR --> WZM
     WZM --> WZI
     WZI --> WZD
+    WZM --> N8N
+    N8N --> PF
 ```
 
 <details>
@@ -56,6 +59,8 @@ pfSense   WAN dhcp / LAN 192.168.50.1   <-- only route out of the lab
 Telemetry:  DC01 (Wazuh agent 1514) ---+
             pfSense (syslog 514) ------+--> Wazuh Manager --> Indexer --> Dashboard
             Suricata (host) -----------+
+                                            |
+                                            +--> n8n SOAR --> back to pfSense / AD
 ```
 </details>
 
@@ -76,6 +81,7 @@ Building first. Practice and adversary emulation come after the platform is comp
 | 3 | **Telemetry** | Wazuh agent · Sysmon · audit policy · pfSense syslog | PLANNED |
 | 4 | **Network IDS** | Suricata on host, tuned | PLANNED |
 | 5 | **Detection** | custom rules · MITRE ATT&CK coverage | PLANNED |
+| 6 | **SOAR** | n8n playbooks — enrich · notify · contain | PLANNED |
 
 Full detail and exit criteria: **[ROADMAP.md](ROADMAP.md)**
 Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
@@ -92,6 +98,7 @@ Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
 | [`identity/`](identity/) | Active Directory, GPO, Sysmon, audit policy |
 | [`siem/`](siem/) | Wazuh — manager, indexer, dashboard |
 | [`detection/`](detection/) | rules, Sigma, MITRE coverage, validation |
+| [`automation/`](automation/) | n8n SOAR playbooks — enrich, notify, contain |
 | [`evidence/`](evidence/) | screenshots proving each verified claim |
 | [`archive/`](archive/) | NOTE: previous labs — **not the current environment** |
 | [`scripts/`](scripts/) | lab start/stop + verification scripts |
@@ -108,6 +115,7 @@ Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
 | [Sysmon](https://learn.microsoft.com/sysinternals) | Windows endpoint telemetry |
 | [SwiftOnSecurity sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config) | Sysmon baseline |
 | Windows Server 2025 (eval) | Active Directory domain controller |
+| [n8n](https://n8n.io) | SOAR / response automation |
 | [MITRE ATT&CK](https://attack.mitre.org) | detection coverage framework |
 
 *Versions are recorded in each folder's README as they are deployed.*
@@ -122,6 +130,7 @@ real to describe.)*
 - Network segmentation and firewall policy design
 - Custom Wazuh detection rules
 - Suricata rule tuning for this environment
+- SOAR playbooks that enrich and contain, with a tested reverse for every action
 
 ---
 

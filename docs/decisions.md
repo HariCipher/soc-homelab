@@ -41,17 +41,22 @@ is already inside the segment at 192.168.50.2.
 
 ---
 
-## 004 — Deception deferred
+## 004 — n8n as the SOAR engine
 
-**Status.** Out of scope until Phase 5 is verified.
+**Decision.** Use n8n for response automation, driven by the Wazuh API and Wazuh
+active response.
 
-**Context.** Deception was considered for the original design. It is recorded here
-so the reasoning is not lost, but nothing is built and no folder exists for it yet.
+**Why.** The alternatives (Shuffle, TheHive + Cortex) are heavier and assume a case
+management workflow this lab does not have yet. n8n is a single process, has an HTTP
+node and a webhook trigger, and that is the whole requirement: receive an alert, call
+an API, act.
 
-**Reasoning kept.** AD honeytokens (a decoy SPN'd account, an audited decoy share)
-cost no memory and detect the behaviour an attacker on a domain actually performs.
-That is a better first step than a honeypot VM. Revisit after the build.
+**Constraint.** Playbooks are built in tiers - enrich, then notify, then contain -
+and containment is not built until detection quality is proven in Phase 5. An
+automation acting on a noisy rule can lock the lab out of its own domain controller.
 
+**Rejected.** Shell scripts in Wazuh active response alone. They work, but they are
+invisible: no run history, no retry, no place to read what happened.
 
 ## 005 — No Wazuh indexer on this host
 

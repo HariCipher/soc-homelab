@@ -12,6 +12,7 @@ The rendered topology diagram lives in the [root README](../README.md).
 | Telemetry | Wazuh agent, Sysmon, syslog | moves events off endpoints to the manager |
 | Detection | Wazuh rules, Suricata | turns events into alerts |
 | Analysis | Wazuh dashboard (indexer-backed) | search, pivot, ATT&CK views |
+| Response | n8n | enrich, notify, contain — driven by the Wazuh API |
 
 ## Design principles
 

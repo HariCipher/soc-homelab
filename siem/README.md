@@ -17,7 +17,6 @@ only SIEM in this lab** — Splunk was removed, see [decision 006](../docs/decis
 DC01 ──Wazuh agent (1514/tcp)──┐
 pfSense ──syslog (514/udp)─────┼──► Wazuh Manager ──filebeat──► Indexer ──► Dashboard
 Suricata (host, eve.json) ─────┘        rules + ATT&CK                        │
-                                                                              └──► n8n
 ```
 
 ## NOTE: The memory constraint

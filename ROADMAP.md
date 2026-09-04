@@ -29,7 +29,6 @@ Budget for lab + SIEM          ~8.5 G
 | Wazuh indexer | **~1.5 G** | JVM heap **capped at 1 G** — not default |
 | Wazuh dashboard | ~0.6 G | |
 | Suricata | ~0.5 G | on host, sniffs `virbr-lab` |
-| n8n | ~0.5 G | |
 | **Total** | **~7.6 G** | fits, with ~1 G margin |
 
 **Three things make it fit:**
@@ -128,43 +127,11 @@ screenshot custom rule firing · MITRE coverage table
 
 ---
 
-## Phase 6 — Deception (honeytokens)
-
-| # | Step |
-|---|---|
-| 6.1 | Decoy AD account — never used, SPN set, alert on any auth attempt |
-| 6.2 | Decoy file share with object-access auditing |
-| 6.3 | Wazuh rule alerting on either being touched |
-
-Zero RAM, near-zero false positives. A honeypot VM can follow later — and if it
-does, the isolation rule (`HONEYPOT → LAN = BLOCK`) goes in **before** it boots.
-
-screenshot honeytoken alert firing
-
----
-
-## Phase 7 — Automation (n8n SOAR)
-
-| # | Playbook |
-|---|---|
-| 7.1 | **Enrich** — Wazuh alert → IP/hash reputation → annotated result |
-| 7.2 | **Notify** — formatted alert to a chat/mail sink |
-| 7.3 | **Contain** — block a source IP on pfSense via its API |
-
-Triggered from the Wazuh API / active response, not by polling files. Start
-notify-only; add containment once false positives are understood.
-
-**Exit criteria:** one alert travels Wazuh → n8n → action with zero manual steps.
-
-screenshot workflow canvas · a successful execution log
-
----
 
 ## After the build — practice DEFERRED
 
 Attack → hunt → harden, run from the host (no attacker VM needed). Kerberoasting,
 AS-REP roasting, LLMNR poisoning, LDAP enumeration, pass-the-hash. Each becomes an
-investigation writeup in `operations/investigations/`.
 
 **Not started until Phase 7 is verified.**
 
@@ -174,7 +141,6 @@ investigation writeup in `operations/investigations/`.
 
 | When | Where |
 |---|---|
-| During work | `lab-journal/YYYY-MM-DD.md` — what I did, what broke |
 | On a verify pass | `STATUS.md` + screenshot in `evidence/` |
 | On a design decision | `docs/decisions.md` |
 | On phase completion | folder README — Design · Verify · Upstream · My changes |

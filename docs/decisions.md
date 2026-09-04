@@ -41,18 +41,17 @@ is already inside the segment at 192.168.50.2.
 
 ---
 
-## 004 — Honeytokens before honeypots
+## 004 — Deception deferred
 
-**Decision.** Start deception with AD honeytokens (a decoy account and a decoy audited
-share) rather than a honeypot VM.
+**Status.** Out of scope until Phase 5 is verified.
 
-**Why.** Zero RAM, near-zero false positives, and it exercises the audit-policy and
-detection pipeline rather than adding another machine to maintain. A containerised
-honeypot can follow.
+**Context.** Deception was considered for the original design. It is recorded here
+so the reasoning is not lost, but nothing is built and no folder exists for it yet.
 
-**Rejected.** OpenCanary / T-Pot VM as the starting point.
+**Reasoning kept.** AD honeytokens (a decoy SPN'd account, an audited decoy share)
+cost no memory and detect the behaviour an attacker on a domain actually performs.
+That is a better first step than a honeypot VM. Revisit after the build.
 
----
 
 ## 005 — No Wazuh indexer on this host
 

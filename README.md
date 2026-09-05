@@ -83,6 +83,7 @@ Building first. Practice and adversary emulation come after the platform is comp
 | 5 | **Detection** | custom rules · MITRE ATT&CK coverage | PLANNED |
 | 6 | **SOAR** | n8n playbooks — enrich · notify · contain | PLANNED |
 
+Coming back after a break: **[RESUME.md](RESUME.md)**
 Full detail and exit criteria: **[ROADMAP.md](ROADMAP.md)**
 Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
 

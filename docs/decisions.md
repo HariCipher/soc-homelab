@@ -89,3 +89,29 @@ reducing DC01 from 4 GB to 3 GB, and capping the indexer JVM heap at 1 GB.
 
 **Supersedes.** Decision 005 (no indexer on this host) and the "Splunk as Wazuh's
 UI" option previously recorded in `siem/README.md`.
+
+---
+
+## 007 — Evidence capture deferred to the practice phase
+
+**Decision.** Do not screenshot each component as it is built. Capture evidence in
+one pass at the end of the build, and during hands-on practice, when the lab is
+being exercised anyway.
+
+**Why.** Screenshotting mid-build costs a context switch per component and produces
+static images of things that are still changing underneath — a Phase 2 screenshot
+taken today would already be stale twice over, since the dashboard config was
+rewritten three times in one evening. Captures taken while actually working the
+lab show it doing something, which is better evidence than a green checkmark.
+
+**Consequence.** Components stay at BUILDING even when their verify scripts pass.
+BUILDING therefore means "verified by script, evidence pending", not "unproven" —
+the verify scripts in `scripts/verify/` are the real proof of function, and they
+are re-runnable, which a screenshot is not.
+
+**Risk accepted.** If the lab is rebuilt or lost before the capture pass, there is
+no visual record of the intermediate states. Mitigated by the verify scripts and
+the snapshots, both of which reproduce the state rather than depict it.
+
+**Revisit.** At the end of Phase 6, or at the first practice session.
+

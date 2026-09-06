@@ -1,6 +1,6 @@
 # Firewall & network security
 
-**Status:** DEGRADED — see [STATUS.md](../STATUS.md) · **Phases 1 & 3**
+**Status:** DEGRADED — see the phase table in the [root README](../README.md) · **Phases 1 & 3**
 
 ## Purpose
 pfSense is the only route out of the lab segment, so every packet is inspectable and

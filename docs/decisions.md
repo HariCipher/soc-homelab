@@ -106,7 +106,7 @@ lab show it doing something, which is better evidence than a green checkmark.
 
 **Consequence.** Components stay at BUILDING even when their verify scripts pass.
 BUILDING therefore means "verified by script, evidence pending", not "unproven" —
-the verify scripts in `scripts/verify/` are the real proof of function, and they
+the verification commands in the setup guide are the real proof of function, and they
 are re-runnable, which a screenshot is not.
 
 **Risk accepted.** If the lab is rebuilt or lost before the capture pass, there is

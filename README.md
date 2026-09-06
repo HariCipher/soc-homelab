@@ -4,9 +4,10 @@ A self-built **Home SOC / security lab** for detection engineering, log analysis
 incident investigation — a segmented virtual network (pfSense firewall + Active
 Directory domain) monitored end-to-end by **Wazuh**.
 
-> **Status:** BUILDING — Phase 1 verified, Phase 2 starting.
-> Nothing here is claimed as working until it is verified by a script and
-> screenshotted. Live state: **[STATUS.md](STATUS.md)**.
+> **Status:** BUILDING — Phases 1-3 verified, Phase 4 (network IDS) next.
+> Nothing here is claimed as working until its exit test passes and the output is
+> screenshotted. What broke on the way there is written up in
+> **[docs/issues.md](docs/issues.md)**.
 
 ---
 
@@ -76,16 +77,17 @@ Building first. Practice and adversary emulation come after the platform is comp
 | # | Phase | Delivers | Status |
 |---|---|---|---|
 | 0 | **Previous work** | earlier pfSense + AD + Wazuh build | ARCHIVED |
-| 1 | **Foundation** | host · libvirt · pfSense · AD-DC, verified | BUILDING |
-| 2 | **SIEM platform** | Wazuh manager + indexer + dashboard | PLANNED |
-| 3 | **Telemetry** | Wazuh agent · Sysmon · audit policy · pfSense syslog | PLANNED |
-| 4 | **Network IDS** | Suricata on host, tuned | PLANNED |
+| 1 | **Foundation** | host · libvirt · pfSense · AD-DC, verified | DONE |
+| 2 | **SIEM platform** | Wazuh manager + indexer + dashboard | DONE |
+| 3 | **Telemetry** | Wazuh agent · Sysmon · audit policy · pfSense syslog | DONE |
+| 4 | **Network IDS** | Suricata on host, tuned | NEXT |
 | 5 | **Detection** | custom rules · MITRE ATT&CK coverage | PLANNED |
 | 6 | **SOAR** | n8n playbooks — enrich · notify · contain | PLANNED |
 
-Coming back after a break: **[RESUME.md](RESUME.md)**
 Full detail and exit criteria: **[ROADMAP.md](ROADMAP.md)**
 Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
+What broke, and why: **[docs/issues.md](docs/issues.md)**
+Why it is built this way: **[docs/decisions.md](docs/decisions.md)**
 
 ---
 
@@ -102,7 +104,6 @@ Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
 | [`automation/`](automation/) | n8n SOAR playbooks — enrich, notify, contain |
 | [`evidence/`](evidence/) | screenshots proving each verified claim |
 | [`archive/`](archive/) | NOTE: previous labs — **not the current environment** |
-| [`scripts/`](scripts/) | lab start/stop + verification scripts |
 
 ---
 
@@ -123,13 +124,41 @@ Step-by-step build instructions: **[docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md)**
 
 ---
 
-## My work in this lab
+## How this lab is built
 
-*(Filled in as each phase is verified — deliberately empty until there is something
-real to describe.)*
+Four practices, and each one has already caught something. The cases are in
+[docs/issues.md](docs/issues.md).
+
+**One change → one verification → one screenshot.** Not one verification per phase.
+A batch of changes that fails tells you the batch is wrong, not which change is.
+
+**Snapshot before every experiment.** `virsh snapshot-create-as` before anything
+touches a VM's config, and the snapshot is named for what it precedes
+(`pre-phase3`), not for how it felt at the time — a snapshot called `healthy` is
+worthless six weeks later when you cannot remember what it was healthy *before*.
+
+**Verify from the far end of the pipeline.** An agent reporting Active proves it
+connected, not that events are stored. So the Phase 3 exit test queries the
+*indexer* for event 4625 after deliberately failing a logon. Two checks in this lab
+passed while the thing they claimed to test was broken; both were checks that
+believed a component's own report.
+
+**Read the config before restarting the service.** `wazuh-remoted -t`, `nginx -t`,
+`visudo -c`. The manager is the thing you would use to debug the manager, so
+validating first is not caution, it is not locking yourself out.
+
+The engineering content is in the design, the failures and the detections — the
+shell scripts that drive the lab day to day are kept out of this repository on
+purpose.
+
+---
+
+## What this demonstrates
 
 - Network segmentation and firewall policy design
-- Custom Wazuh detection rules
+- End-to-end telemetry: Windows audit policy, Sysmon, PowerShell script-block
+  logging, firewall syslog
+- Custom Wazuh detection rules mapped to MITRE ATT&CK
 - Suricata rule tuning for this environment
 - SOAR playbooks that enrich and contain, with a tested reverse for every action
 

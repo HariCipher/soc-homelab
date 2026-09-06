@@ -15,4 +15,5 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now labnet-hostip.service
 ```
 
-Verify: `scripts/verify/00-host.sh` → `labnet IP is persistent` PASS.
+Verify: `ip addr show virbr-lab` reports `192.168.50.2/24`, and
+`systemctl is-enabled labnet-hostip.service` reports `enabled`, after a real reboot.

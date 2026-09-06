@@ -20,3 +20,10 @@ evidence/**/raw/
 .claude/
 .claude-flow/
 .serena/
+
+# working files - local tracking only, deliberately not published.
+# The repo publishes the design, the setup guide, the issues log and the
+# detections. How the lab is driven day to day is not portfolio material.
+scripts/
+STATUS.md
+RESUME.md

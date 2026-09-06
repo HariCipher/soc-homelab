@@ -42,22 +42,23 @@ months. A 32 GB upgrade later removes this constraint entirely.
 
 ---
 
-## Phase 1 — Foundation BUILDING *(nearly done)*
+## Phase 1 — Foundation
 
-| # | Step | State |
-|---|---|---|
-| 1.1 | pfSense and DC01 booting | yes done |
-| 1.2 | Host address `192.168.50.2/24` on `virbr-lab` | yes set, **not persistent** |
-| 1.3 | Make the host labnet address persistent | |
-| 1.4 | Reduce DC01 memory 4 G → 3 G | |
-| 1.5 | pfSense DHCP scope: DNS `192.168.50.10`, domain `homelab.lan` | |
-| 1.6 | DC01 time sync → pfSense | |
-| 1.7 | **Snapshot both VMs as `healthy`** | **blocking** |
+| # | Step |
+|---|---|
+| 1.1 | pfSense and DC01 booting |
+| 1.2 | Host address `192.168.50.2/24` on `virbr-lab` |
+| 1.3 | Make the host labnet address persistent |
+| 1.4 | Reduce DC01 memory 4 G → 3 G |
+| 1.5 | pfSense DHCP scope: DNS `192.168.50.10`, domain `homelab.lan` |
+| 1.6 | DC01 time sync → pfSense |
+| 1.7 | **Snapshot both VMs as `healthy`** |
 
-**Exit criteria:** `scripts/verify/01-foundation.sh` exits 0 (11/11).
-Currently 9/11 — only the two snapshot checks fail.
+**Exit criteria:** all 11 foundation checks pass — both libvirt networks present,
+the host's labnet address persistent, pfSense GUI answering, DC01 reachable, AD DNS
+resolving internal, external and SRV records, and both VMs snapshotted.
 
-screenshot pfSense dashboard · `Get-ADDomain` output · verify script passing
+screenshot pfSense dashboard · `Get-ADDomain` output · the foundation checks passing
 
 ---
 
@@ -166,6 +167,6 @@ a detection test that either fires or exposes a gap.
 
 | When | Where |
 |---|---|
-| On a verify pass | `STATUS.md` + screenshot in `evidence/` |
+| On a verify pass | screenshot in `evidence/` |
 | On a design decision | `docs/decisions.md` |
 | On phase completion | folder README — Design · Verify · Upstream · My changes |

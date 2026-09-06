@@ -1,8 +1,9 @@
 # Setup guide — building the lab
 
 Follow in order. **Never skip ahead**: each phase assumes the one before it verified.
-After each phase, run its verify script, screenshot the result, update `STATUS.md`,
-commit.
+Each phase ends with an explicit exit test — run it, screenshot the result, commit.
+A phase is not finished because the commands ran; it is finished when its exit test
+passes.
 
 Conventions: `$` = Arch host shell · `PS>` = DC01 PowerShell · `GUI` = pfSense web UI.
 
@@ -11,10 +12,14 @@ Conventions: `$` = Arch host shell · `PS>` = DC01 PowerShell · `GUI` = pfSense
 ## Phase 1 — Foundation
 
 ### 1.1 Start the lab
+Nothing autostarts — libvirt VM autostart is deliberately off, so the host boots
+without spending 4 GB on VMs you may not need. Start the firewall first and let it
+settle before the domain controller, or DC01 comes up with no DNS and no gateway.
+
 ```bash
-$ cd ~/soc-homelab
-$ bash scripts/lab-up.sh
-$ bash scripts/verify/01-foundation.sh
+$ virsh -c qemu:///system start pfsense
+$ until ping -c1 -W1 192.168.50.1 &>/dev/null; do sleep 2; done
+$ virsh -c qemu:///system start ad-dc
 ```
 
 ### 1.2 Make the host's labnet address persistent
@@ -119,8 +124,23 @@ A snapshot whose name misstates its contents is worse than no snapshot: it gets
 trusted as a rollback point that does not contain what you think.
 
 ### DONE Phase 1 exit
+Eleven checks, all of which must pass:
+
 ```bash
-$ bash scripts/verify/01-foundation.sh     # must be 11/11, exit 0
+$ virsh -c qemu:///system net-list --all        # default + labnet, both active
+$ ip addr show virbr-lab | grep 192.168.50.2    # host address present
+$ systemctl is-enabled labnet-hostip.service    # and persistent across reboot
+$ curl -sko /dev/null -w '%{http_code}\n' https://192.168.50.1/   # pfSense GUI: 200
+$ ping -c1 192.168.50.10                        # DC01 reachable
+$ virsh -c qemu:///system snapshot-list ad-dc   # a named rollback point exists
+```
+On DC01, AD itself must answer — the domain, and its own SRV records:
+```powershell
+PS> Get-ADDomain
+PS> Resolve-DnsName dc01.homelab.lan
+PS> Resolve-DnsName -Type SRV _ldap._tcp.homelab.lan
+PS> Resolve-DnsName -Type SRV _kerberos._tcp.homelab.lan
+PS> Resolve-DnsName archlinux.org             # forwarding out through pfSense works
 ```
 screenshot `evidence/foundation/` — pfSense dashboard, `Get-ADDomain`, verify output.
 
@@ -130,12 +150,13 @@ screenshot `evidence/foundation/` — pfSense dashboard, `Get-ADDomain`, verify 
 
 ### 2.1 Remove Splunk — DONE 2026-09-03
 
-Removed via `scripts/remove-splunk.sh`. Reclaimed **6.2 GB of disk**.
+Stopped, uninstalled, and `/opt/splunk` removed. Reclaimed **6.2 GB of disk**.
 
 NOTE: this freed almost no RAM. Splunk was not running and had no systemd unit,
-so it had no memory footprint to reclaim. The earlier RAM budget was optimistic
-on this point. See "Memory reality" in `STATUS.md` for measured figures and where
-the indexer's memory actually has to come from.
+so it had no memory footprint to reclaim. The earlier RAM budget was optimistic on
+this point — disk pressure and memory pressure are different problems, and freeing
+one does not help the other. The indexer's 1.5 GB has to come from somewhere else,
+which is why DC01 dropped to 3 GB and the JVM heap is pinned in 2.4.
 
 ### 2.2 Check the manager version first
 The indexer, dashboard and every agent **must all match** the manager version.
@@ -196,6 +217,55 @@ screenshot `evidence/siem/` — dashboard overview, cluster health, `free -h`.
 
 ## Phase 3 — Telemetry
 
+Take the rollback point first — this phase installs an agent and rewrites audit
+policy on the domain controller:
+
+```bash
+$ virsh -c qemu:///system snapshot-create-as ad-dc pre-phase3 "before telemetry"
+```
+
+**Start the indexer before anything ships to it.** If it is not running, events
+still reach the manager but nothing lands in the index, and the phase looks broken
+for a reason that has nothing to do with the endpoint.
+
+```bash
+$ sudo systemctl start wazuh-indexer
+```
+
+**Declare the event channels once, on the manager.** `/var/ossec/etc/shared/default/agent.conf`
+is pulled by every agent in the group, so the channels live in one place and DC01's
+own `ossec.conf` is never hand-edited:
+
+```xml
+<!-- /var/ossec/etc/shared/default/agent.conf -->
+<agent_config os="Windows">
+  <localfile><location>Security</location><log_format>eventchannel</log_format></localfile>
+  <localfile><location>Microsoft-Windows-Sysmon/Operational</location><log_format>eventchannel</log_format></localfile>
+  <localfile><location>Microsoft-Windows-PowerShell/Operational</location><log_format>eventchannel</log_format></localfile>
+  <localfile><location>System</location><log_format>eventchannel</log_format></localfile>
+</agent_config>
+```
+
+Then add the syslog listener pfSense will send to (3.5), inside `ossec.conf`:
+
+```xml
+<remote>
+  <connection>syslog</connection>
+  <port>514</port>
+  <protocol>udp</protocol>
+  <allowed-ips>192.168.50.0/24</allowed-ips>
+  <local_ip>192.168.50.2</local_ip>
+</remote>
+```
+
+Validate before restarting — a bad `ossec.conf` takes the manager down, and the
+manager is the thing you would use to debug it:
+
+```bash
+$ sudo /var/ossec/bin/wazuh-remoted -t && sudo systemctl restart wazuh-manager
+$ ss -lntu | grep -E ':(1514|1515|514) '     # all three must be listening
+```
+
 ### 3.1 Wazuh agent on DC01
 **Version must equal the manager version from 2.2.**
 ```powershell
@@ -216,6 +286,20 @@ PS> auditpol /set /subcategory:"Process Creation"  /success:enable
 PS> auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
 PS> auditpol /set /subcategory:"Directory Service Access" /success:enable /failure:enable
 ```
+Those subcategory names are **localised**. On a non-English Windows they do not
+match and `auditpol` fails with a message that reads like a permissions problem.
+Use the GUID instead, which is stable everywhere — Process Creation is
+`{0CCE922B-69AE-11D9-BED3-505054503030}`:
+```powershell
+PS> auditpol /set /subcategory:"{0CCE922B-69AE-11D9-BED3-505054503030}" /success:enable
+```
+
+**If a setting reverts:** DC01 is a domain controller, so Default Domain Controllers
+Policy overwrites anything `auditpol` set locally at the next GPO refresh. Re-applying
+it looks like it worked, then it disappears again. Set it in the GPO instead —
+Computer Configuration → Policies → Windows Settings → Security Settings → Advanced
+Audit Policy Configuration.
+
 Include the command line in 4688 events — without this, 4688 is nearly useless:
 ```powershell
 PS> reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit" /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f
@@ -234,15 +318,10 @@ PS> Expand-Archive C:\Sysmon.zip -DestinationPath C:\Sysmon
 PS> Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile C:\Sysmon\config.xml
 PS> C:\Sysmon\Sysmon64.exe -accepteula -i C:\Sysmon\config.xml
 ```
-Then tell the agent to collect the Sysmon channel — add to `C:\Program Files (x86)\ossec-agent\ossec.conf`:
-```xml
-<localfile>
-  <location>Microsoft-Windows-Sysmon/Operational</location>
-  <log_format>eventchannel</log_format>
-</localfile>
-```
+Nothing to configure on the agent for this — the Sysmon channel is already in the
+shared `agent.conf` above, and DC01 picks it up on the next pull. Force it now:
 ```powershell
-PS> Restart-Service Wazuh
+PS> Restart-Service WazuhSvc
 ```
 
 ### 3.5 pfSense remote syslog
@@ -256,16 +335,32 @@ PS> Restart-Service Wazuh
 | Events | Firewall, DHCP, System, VPN, Portal Auth |
 
 ### DONE Phase 3 exit — the end-to-end test
-On DC01, deliberately fail a logon:
+`phase3-dc01.ps1` fires this on its last step, so it should already be in the
+index. To repeat it by hand on DC01:
 ```powershell
 PS> runas /user:homelab\nosuchuser cmd      # enter a wrong password
 ```
 Then find event **4625** in the Wazuh dashboard. That single test proves agent →
 manager → indexer → dashboard all work.
 
+Confirm it from the **indexer**, not from the agent's own claim — the agent
+reporting Active only means it is connected, not that events are being stored:
+
 ```bash
-$ bash scripts/verify/02-telemetry.sh
+$ sudo /var/ossec/bin/agent_control -l                  # DC01 must be Active
+$ curl -sk -u admin:admin 'https://127.0.0.1:9200/wazuh-alerts-*/_count' \
+    -H 'Content-Type: application/json' \
+    -d '{"query":{"match":{"data.win.system.eventID":"4625"}}}'
 ```
+
+Repeat that count for `4688` (process creation), `4104` (script block) and a
+`match_phrase` on `data.win.system.providerName: Microsoft-Windows-Sysmon`. A
+non-zero count for each means the whole layer works.
+
+**Do not check this by grepping `alerts.json` for `"id":"4688"`** — `id` is the
+*rule* id there, not the event number, so it silently never matches. That mistake
+and a worse one next to it are written up in [issues.md](issues.md#5--two-verification-checks-passed-for-the-wrong-reasons).
+
 screenshot `evidence/identity/` + `evidence/siem/` — agent Active, the 4625 alert, a Sysmon event.
 
 ---

@@ -1,6 +1,6 @@
 # Evidence
 
-Screenshots that back every DONE claim in [STATUS.md](../STATUS.md).
+Screenshots that back every verified claim in the [root README](../README.md) phase table.
 
 **Naming:** `<area>/YYYY-MM-DD-what-it-shows.png`
 

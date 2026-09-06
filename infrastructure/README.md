@@ -1,6 +1,6 @@
 # Infrastructure
 
-**Status:** DEGRADED — see [STATUS.md](../STATUS.md) · **Phase 1**
+**Status:** DEGRADED — see the phase table in the [root README](../README.md) · **Phase 1**
 
 ## Purpose
 The hypervisor layer: the Arch host, the two libvirt networks, the VM definitions,
@@ -11,12 +11,14 @@ See [`docs/network.md`](../docs/network.md). Two networks — `default` (NAT, pf
 WAN) and `labnet` (isolated). Two VMs — `pfsense` and `ad-dc`.
 
 ## Current state
-All claims live in [STATUS.md](../STATUS.md). Both VMs are currently **shut off**
+Component state is tracked locally during the build; the published claims are in the [root README](../README.md) phase table. Both VMs are currently **shut off**
 with autostart disabled.
 
 ## Verify
 ```bash
-scripts/verify/00-host.sh
+# host layer: hypervisor, both libvirt networks, the labnet address, Wazuh services
+virsh -c qemu:///system net-list --all
+ip addr show virbr-lab | grep 192.168.50.2
 ```
 
 ## Open items

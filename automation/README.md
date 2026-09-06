@@ -1,6 +1,6 @@
 # automation — SOAR
 
-**Status:** PLANNED — see [STATUS.md](../STATUS.md) · **Phase 6**
+**Status:** PLANNED — see the phase table in the [root README](../README.md) · **Phase 6**
 
 ## Purpose
 
@@ -44,7 +44,7 @@ detection improvement.
 
 ## Status
 
-Nothing is built. See [STATUS.md](../STATUS.md).
+Nothing is built yet.
 
 ## Verify
 

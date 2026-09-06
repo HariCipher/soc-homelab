@@ -4,7 +4,7 @@
 prior work and as a source of components to migrate into the current build.
 
 The current environment is described in the [root README](../README.md) and its live
-state in [STATUS.md](../STATUS.md).
+state in the [root README](../README.md).
 
 | Lab | Period | What it was | What gets migrated |
 |---|---|---|---|

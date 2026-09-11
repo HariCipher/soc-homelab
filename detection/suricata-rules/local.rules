@@ -1,0 +1,79 @@
+# soc-homelab local Suricata rules
+#
+# sid range 9000000+ is reserved for this lab. ET Open never allocates there,
+# so a local rule can never collide with a ruleset update.
+#
+# Source of truth is this file, in git. scripts/phase4-probe.sh installs it to
+# /var/lib/suricata/rules/local.rules. Never edit the installed copy - the next
+# suricata-update run is not the thing that would overwrite it, but the next
+# person looking for the rule will read this one.
+
+# 9000001 - deterministic pipeline test.
+# Fired on demand by scripts/phase4-probe.sh with an ICMP echo carrying a marker
+# payload. This detects nothing real; it exists so the path
+# Suricata -> eve.json -> Wazuh -> indexer can be proven without waiting for a
+# genuine ET rule to match. A pipeline you cannot trigger on purpose is a
+# pipeline you cannot debug.
+alert icmp any any -> $HOME_NET any (msg:"SOC-HOMELAB phase4 pipeline probe"; itype:8; content:"PHASE4PROBE"; sid:9000001; rev:1; classtype:misc-activity;)
+
+# ---------------------------------------------------------------------------
+# Phase 4.3 / Phase 5 detections.
+#
+# All of these are $HOME_NET -> $HOME_NET on purpose. HOME_NET is
+# 192.168.50.0/24 and EXTERNAL_NET is !HOME_NET, so EXTERNAL_NET is EMPTY
+# inside this lab. ET Open is written $EXTERNAL_NET -> $HOME_NET, which is why
+# 44,846 imported rules produced nothing for an internal nmap scan and only a
+# direction-agnostic STREAM event fired. A rule written the ET way here is
+# silently dead. This is the single most important thing to know before adding
+# a rule to this file.
+#
+# Every rule below records the command that makes it fire. If you add one and
+# cannot write that line, do not add it - see issues 14 and 15.
+# ---------------------------------------------------------------------------
+
+# 9000002 - access to an administrative share (ADMIN$, C$).
+# The staging step of nearly every remote-execution tool: drop a payload on
+# ADMIN$, then create a service to run it. IPC$ is deliberately NOT matched -
+# every SMB session negotiates it and it would fire constantly.
+# Trigger: smbclient //192.168.50.10/ADMIN$ -U Administrator
+alert smb $HOME_NET any -> $HOME_NET any (msg:"SOC-HOMELAB T1021.002 - SMB administrative share access"; flow:established,to_server; smb.share; pcre:"/(?:^|\\)(?:ADMIN|C)\$$/i"; classtype:attempted-admin; sid:9000002; rev:1; metadata:mitre_technique_id T1021.002, mitre_tactic lateral-movement;)
+
+# 9000003 - SAMR account enumeration over an SMB named pipe.
+# How an attacker lists domain users once they have any foothold. DC01 is the
+# only Windows host, so SAMR sourced from anywhere else is worth seeing.
+# Trigger: rpcclient -W HOMELAB -U Administrator 192.168.50.10 -c enumdomusers
+# Anonymous (-U "" -N) is refused by Server 2022+ by default, and refused
+# before the samr pipe is ever opened - so it cannot fire this rule.
+alert smb $HOME_NET any -> $HOME_NET any (msg:"SOC-HOMELAB T1087.002 - SAMR domain account enumeration"; flow:established,to_server; smb.named_pipe; content:"samr"; nocase; classtype:attempted-recon; sid:9000003; rev:1; metadata:mitre_technique_id T1087.002, mitre_tactic discovery;)
+
+# 9000004 - Kerberos pre-auth failures: password spraying against real accounts.
+# KDC_ERR_PREAUTH_FAILED (24) means the USERNAME WAS VALID and the password was
+# not. Thresholded because one failure is a typo and five in two minutes is not.
+# Counted by_dst: the KRB-ERROR travels KDC -> client, so the client being
+# sprayed is the DESTINATION. Tracking by_src would count the DC, not the
+# attacker, and the rule would never threshold correctly.
+# Trigger: kinit sprayme@HOMELAB.LAN five times, typing a wrong password each
+# time. MIT kinit reads the password from /dev/tty, not stdin, so it cannot be
+# piped or looped non-interactively.
+#
+# DO NOT spray Administrator. Domains built on Server 2022+ ship an account
+# lockout threshold, and locking out the only admin account costs you the lab.
+# Use a disposable account created for this test:
+#   New-ADUser -Name sprayme -AccountPassword (Read-Host -AsSecureString) -Enabled $true
+# Confirm the policy first with Get-ADDefaultDomainPasswordPolicy - if
+# LockoutThreshold is under 5, this rule's count of 5 cannot be reached before
+# the account locks, and you must lower the threshold to match.
+#
+# Requires the HOMELAB.LAN realm to be resolvable. /etc/krb5.conf ships
+# ATHENA.MIT.EDU as default_realm, but the realm is named explicitly here and
+# DNS SRV lookup is on by default, so no edit may be needed. If kinit reports
+# "Cannot find KDC for realm", add: HOMELAB.LAN = { kdc = 192.168.50.10 }
+alert krb5 $HOME_NET any -> $HOME_NET any (msg:"SOC-HOMELAB T1110.003 - Kerberos pre-auth failures, possible password spray"; krb5_err_code:24; threshold:type threshold, track by_dst, count 5, seconds 120; classtype:unsuccessful-user; sid:9000004; rev:1; metadata:mitre_technique_id T1110.003, mitre_tactic credential-access;)
+
+# 9000005 - Kerberos unknown principal: username enumeration.
+# KDC_ERR_C_PRINCIPAL_UNKNOWN (6) means the username does NOT exist. This is
+# how kerbrute and friends separate real accounts from guesses, before any
+# password is ever tried. Not thresholded, so a single attempt is visible and
+# so the rule can be proven with one command.
+# Trigger: kinit nosuchuser@HOMELAB.LAN
+alert krb5 $HOME_NET any -> $HOME_NET any (msg:"SOC-HOMELAB T1589.002 - Kerberos unknown principal, username enumeration"; krb5_err_code:6; classtype:attempted-recon; sid:9000005; rev:1; metadata:mitre_technique_id T1589.002, mitre_tactic reconnaissance;)

@@ -28,9 +28,15 @@ Budget for lab + SIEM          ~8.5 G
 | Wazuh manager | ~0.5 G | already running |
 | Wazuh indexer | **~1.5 G** | JVM heap **capped at 1 G** — not default |
 | Wazuh dashboard | ~0.6 G | |
-| Suricata | ~0.5 G | on host, sniffs `virbr-lab` |
+| Suricata | **~0.87 G** | on host, sniffs `virbr-lab`; measured 2026-09-11, was budgeted 0.5 G |
 | n8n (SOAR) | ~0.4 G | single Node process, idle most of the time |
-| **Total** | **~7.5 G** | fits, with ~1 G margin |
+| **Total** | **~7.9 G** | fits, with ~0.6 G margin |
+
+**Suricata is 370 MiB over budget.** Measured at 870 MiB steady, not the 0.5 G
+assumed here. The trimmed ruleset only recovers ~11% (see STATUS, "Suricata's
+cost"); the earlier claim that trimming cut it to 230 MiB was a measurement
+error. This eats a third of the margin and is the reason the indexer stays
+manual-start rather than boot-enabled (issue 9).
 
 **Three things make it fit:**
 1. Splunk removed — reclaimed 6.2 GB of disk (it was not running, so almost no RAM)

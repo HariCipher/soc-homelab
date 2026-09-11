@@ -147,20 +147,106 @@ first.
 
 ---
 
-## 7 — pfSense syslog arrives but nothing parses it
+## 7 — pfSense never sends firewall logs (was: "nothing parses them")
 
-**Status: open.** Carried into the network-IDS phase.
+**Status: transport fixed 2026-09-11, decoding and indexing unverified.** The
+remediation was a pfSense setting, not a manager decoder — confirmed by fixing it.
 
-**Symptom.** Remote syslog was enabled on pfSense and the manager received exactly one
-event — rule 1005, "Syslogd restarted", logged at the moment the setting was saved.
-Transport confirmed. But that event matched **no decoder** (`decoder: null`).
+**Fix applied 2026-09-11.** Status → System Logs → Settings → Remote Logging →
+**Firewall events** ticked. The earlier saves had returned HTTP 403 on CSRF failure
+and never committed; this one did. `filterlog` now arrives on the wire:
 
-**Why it matters.** The pipe works; the content is not being turned into fields. It
-would be easy to see "pfSense syslog: PASS" and assume firewall visibility exists. It
-does not yet.
+```
+<134>Sep 11 23:10:18 filterlog[56519]: 79,,,100000101,vtnet1,match,pass,in,4,0x0,,128,
+35993,0,none,17,udp,86,192.168.50.10,8.8.8.8,58404,53,66
+```
 
-**Next.** Confirm which log categories pfSense is actually sending, then check the
-`pf`/`filterlog` decoders on the manager.
+Captured with `tcpdump -lni virbr-lab -A udp port 514`. Transport is **proven**.
+
+**Still unproven, and not to be claimed until measured:**
+
+- **Decoding.** The syslog header carries no hostname — it goes straight from
+  timestamp to `filterlog[56519]:`, where RFC3164 expects `TIMESTAMP HOSTNAME TAG:`.
+  Wazuh's pre-decoder may read the tag as the hostname. Settle with
+  `wazuh-logtest`, not by inspecting alerts.
+- **Indexing.** The captured events are all `match,pass`. Wazuh scores routine
+  passes at level 0 and writes no alert, so a zero count in `wazuh-alerts-*` is
+  correct behaviour here, not a failure. Generate a genuine **block** to test the
+  indexed path, or read `archives.log` with `logall_json` enabled.
+
+**Volume warning.** These lines come from the LAN allow rule with logging enabled,
+so every permitted packet now generates an event. On a lab already 370 MiB over the
+Suricata budget with a hand-started indexer, leave only block logging on once the
+pipeline is proven.
+
+**Check fixed.** `scripts/verify/02-telemetry.sh` reported "pfSense syslog: PASS" on
+`syslogd: restart` heartbeats while firewall visibility was zero. Renamed to
+`pfSense reachable by syslog (heartbeat only)` and a separate wire-level
+`filterlog` check added beside it.
+
+**Two more instances of the 14/15/16 class, both found while fixing this.** Neither
+was a lab fault; both were checks that reported absence without looking.
+
+1. `sudo ss -lunp` with stderr to `/dev/null`: sudo failed for want of a terminal,
+   the `||` branch printed "no UDP 514 listener", and 514/udp was listening the
+   whole time. A conclusion printed by a command that never ran.
+2. `tcpdump -A | grep filterlog`: grep block-buffers when stdout is not a terminal,
+   so matching packets produced a blank screen. Then `grep -c` on an unbounded
+   `tcpdump` — a count that prints only at EOF, from a stream that has no EOF.
+   Both read as clean negatives.
+
+**Lesson, sharpened.** The original entry theorised about a decoder for three days
+over content that was never sent, while the firewall sat in the indexer logging the
+403 evidence of its own misconfiguration. Before believing a zero: prove the command
+ran, prove it could have printed, and prove it terminates.
+
+**What the record used to say.** That the manager received exactly one event (rule
+1005, "Syslogd restarted") and that it matched **no decoder** (`decoder: null`), so
+pfSense content was arriving unparsed.
+
+**What is actually true.** Measured against the indexer on 2026-09-11, over every
+`wazuh-alerts-*` index in retention:
+
+| From `location: 192.168.50.1` | Count | Decoder |
+|---|---|---|
+| `syslogd` — "restart" | 6 | none (rule 1005) |
+| `nginx` — GUI access log | 5 | `web-accesslog` (rule 31101) |
+| `filterlog` — **the firewall log** | **0** | — never received |
+
+Three corrections follow.
+
+1. **It was never one event.** Twelve arrived across five days.
+2. **Decoding is not broken.** Five of them decode cleanly through `web-accesslog`
+   into rule 31101. The pipeline parses pfSense content correctly whenever pfSense
+   sends content that has a decoder.
+3. **`decoder: null` on rule 1005 is normal Wazuh behaviour, not a fault.** The
+   pre-decoder extracts `program_name: syslogd` from the syslog header and rule 1005
+   matches on that alone. A bare `syslogd: restart` line has no fields to decode.
+   Reading `decoder: null` as "parsing is broken" was the mistake.
+
+**The real gap.** `filterlog` — the pfSense firewall log, the only category that
+carries block/pass decisions, ports, and directions — has **never reached the
+manager**. Not unparsed: absent. Nothing on the Wazuh side can fix that, because
+nothing is being sent.
+
+**Probable reason it was never enabled.** The same query surfaced five `nginx`
+events: `POST /status_logs_settings.php` returning **HTTP 403**, from `192.168.50.2`
+(the host browser), on 09-08 and 09-10. That is the Status → System Logs → Settings
+page rejecting the save — pfSense returns 403 on a CSRF-token failure. The remote
+logging settings were very likely never committed. The firewall logged the evidence
+of its own misconfiguration, and it sat in the indexer for three days.
+
+**Why it matters.** Unchanged, and now sharper: there is no firewall visibility. A
+"pfSense syslog: PASS" check passes on `syslogd: restart` heartbeats and proves
+nothing about firewall logging.
+
+**Next.** In the pfSense GUI, tick **Firewall events** under Status → System Logs →
+Settings → Remote Logging, confirm the save actually returns 200, then re-run the
+filterlog count below and expect it to be non-zero.
+
+**Seventh instance of the issues 14/15/16 class.** A reading — `decoder: null` — was
+real, and the cause attached to it was invented. The check proved something other
+than what it claimed. Confirm *absence* before theorising about *processing*.
 
 ---
 
@@ -202,3 +288,10 @@ like any other claim.
 | `virsh console ad-dc` shows a blank screen | Windows does not write to a serial port unless EMS/SAC is enabled. Use `virt-viewer` (VNC). Cost time looking for a broken console that was fine. |
 | Filebeat is enabled at boot, the indexer is not | On a cold boot filebeat retries into nothing until the indexer starts. Not data loss — filebeat keeps its registry position and drains — but the journal fills with errors and the lab looks broken when it is not. A deliberate RAM-budget choice, not an oversight. |
 | Audit policy on a domain controller | Default Domain Controllers Policy overrides anything `auditpol` sets locally at the next GPO refresh. If a subcategory silently stops producing events, that is the cause. Set it in the GPO to make it stick. |
+| A verify script that greps a log file for a success string | The string may have been written by a previous run. `engine started` was still in `suricata.log` from the last restart, so the readiness wait returned instantly and the probe tested a half-started engine. Record the file's byte offset before the action and read only past it — or check the outcome directly instead of a log narrating it. |
+| A check that has never been observed to fail | Issues 14, 15 and the `PROMISC` check all passed or failed for reasons unrelated to the thing under test. A check is not evidence until you have made it fail on purpose. |
+| ET Open against an internal port scan | An nmap `--top-ports 100` against the DC produced **no Suricata alert at all** — not one signature. ET Open is aimed at malware C2 and exploits crossing a perimeter, not at recon inside a flat lab net. Custom rules do the work here. *(Corrected 2026-09-11 — see the row below for what this claim originally said.)* |
+| A count that matches the story you expect | The row above used to read "produced exactly one signature, `SURICATA STREAM excessive retransmissions`", and STATUS.md said the scan produced 5 of them. Queried by date and address, the non-probe alert count on the day of the scan is **0**; those 5 retransmission alerts are dated a day later and are DC01 talking to a Microsoft CDN on port 80. The number 5 was real, the attribution was invented. Fifth instance of issues 14/15/16 and the `PROMISC` check: filter on the identifiers — date, src, dest — before attributing a count to a cause. |
+| Trimming a Suricata ruleset to save RAM | Cutting 15% of the rules cut memory ~11% (976 -> 870 MiB). Roughly linear with rule count; there is no cheap win. *(Corrected 2026-09-11 — this row previously claimed a 76% steady-state cut and concluded "steady state is the pattern matcher, the peak is rule parsing." Both were inferred from one mis-timed sample. See the row below.)* |
+| `MemoryCurrent` sampled before a service has settled | A cold-start trajectory: 17 MiB at 15 s, 870 MiB at 30 s, flat to 135 s and at 23 min. The 230 MiB "steady state" in STATUS was taken inside the load window, filed as a real data point, and generated a false lesson that survived three months. The tell was already in the table: every honest row had steady/peak ≈ 0.96; the bad row diverged by 4x. When one row in a table disagrees with the shape of the others, re-measure it before theorising about it. Sample only after two consecutive reads agree. |
+| A config grep that reports a setting disabled | YAML list entries may be bare (`- smb`) or mappings (`- smb:`). A pattern written for one form reports the other as absent, and a negative grep looks identical whether the setting is off or the pattern is wrong. Run the pattern against a value you know is present before believing a zero. |

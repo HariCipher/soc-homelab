@@ -1,0 +1,139 @@
+<!--
+  Phase 5 - custom Wazuh detections.
+
+  STATUS: UNVERIFIED. Not one of these rules has fired yet. By this repo's own
+  standard a rule without a passing test is a guess, so none of them may be
+  called a detection until `scripts/verify/05-detections.sh` shows it firing,
+  read back from the indexer.
+
+  Why these exist: ET Open produced zero alerts on a 100-port nmap of DC01 and
+  contributed two false positives plus eight INFO-class hits in 63.6 hours
+  (detection/README.md, 4.3). It is a perimeter ruleset aimed at an internal
+  flat network. These rules are the detection capability on this lab, not a
+  bonus layer on top of it.
+
+  Deploy to:  /var/ossec/etc/rules/local_rules.xml
+  Then:       sudo systemctl restart wazuh-manager
+  This file is canonical; the deployed copy must match it, the same contract
+  03-ids.sh enforces for the Suricata local rules.
+
+  IDs 100100-100103 sit in Wazuh's 100000-120000 user range.
+
+  Field paths assume the windows_eventchannel decoder. Verify each against a
+  real event with `wazuh-logtest -v` before trusting a green result - a rule
+  that never matches and a rule that never had a matching event look identical
+  from the outside.
+-->
+
+<group name="homelab,attack,">
+
+  <!--
+    100100 - Kerberoasting (T1558.003)
+
+    4769 is a service ticket request: one of the noisiest events in AD. The
+    signal is the encryption type. Server 2019/2022 negotiate AES by default,
+    so an RC4 (0x17) request for a user-account SPN is anomalous and is what
+    Rubeus/GetUserSPNs ask for to get a crackable ticket.
+
+    Exclusions, both in the serviceName pcre2:
+      - krbtgt        : the TGT itself, always present
+      - names ending $: computer accounts, which legitimately use RC4 in places
+  -->
+  <rule id="100100" level="12">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4769$</field>
+    <field name="win.eventdata.ticketEncryptionType">^0x17$</field>
+    <field name="win.eventdata.serviceName" type="pcre2">^(?!krbtgt$)(?!.*\$$).+</field>
+    <description>Kerberoasting: RC4 service ticket requested for SPN $(win.eventdata.serviceName) by $(win.eventdata.targetUserName)</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+  </rule>
+
+  <!--
+    100101 - AS-REP roasting (T1558.004)
+
+    4768 with preAuthType 0 means a TGT was issued with Kerberos pre-auth
+    disabled - the account is roastable without any credential. Normal accounts
+    report preAuthType 2 (encrypted timestamp). A 0 is either a genuinely
+    misconfigured account or an attacker enumerating for one.
+
+    Note: this fires on the account being *usable* this way, so it will also
+    catch the test user created to prove it. That is correct, not a false
+    positive - remove the flag after testing.
+  -->
+  <rule id="100101" level="12">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4768$</field>
+    <field name="win.eventdata.preAuthType">^0$</field>
+    <description>AS-REP roasting: TGT issued without Kerberos pre-authentication for $(win.eventdata.targetUserName)</description>
+    <mitre>
+      <id>T1558.004</id>
+    </mitre>
+  </rule>
+
+  <!--
+    100102 - Encoded PowerShell (T1059.001)
+
+    4104 carries the deobfuscated script block, which is why it is worth more
+    than 4688 command-line logging here: it survives most encoding. Matching
+    -enc / -EncodedCommand / FromBase64String catches the common launcher shape.
+
+    Known limit: this is a string match, and string matches are evadable
+    (whitespace, string concatenation, case tricks are all handled by the (?i)
+    and \s* but splitting the literal is not). It raises the cost of casual
+    obfuscation; it does not stop a deliberate operator. Documented rather than
+    overclaimed.
+
+    Depends on: 4104 script-block logging, confirmed present in 02-telemetry.sh.
+  -->
+  <rule id="100102" level="10">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4104$</field>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)(-enc\s|-encodedcommand|frombase64string)</field>
+    <description>Encoded PowerShell executed on $(win.system.computer)</description>
+    <mitre>
+      <id>T1059.001</id>
+    </mitre>
+  </rule>
+
+  <!--
+    100103 - Service installed with an interpreter payload (T1543.003)
+
+    7045 is Service Control Manager recording a new service. Service creation is
+    a normal admin act, so plain 7045 is not a detection. The signal is an
+    imagePath that runs an interpreter rather than a binary - the shape PsExec,
+    Metasploit service payloads and most persistence tooling leave behind.
+
+    PREREQUISITE, and a real one: 7045 is on the *System* channel, not Security.
+    02-telemetry.sh only proves Security and Sysmon/Operational are collected.
+    If System is not in the shared agent.conf this rule cannot fire and will
+    look exactly like "no attacks happened". 05-detections.sh checks for the
+    channel first for that reason.
+  -->
+  <rule id="100103" level="12">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^7045$</field>
+    <field name="win.eventdata.imagePath" type="pcre2">(?i)(powershell|cmd\.exe|rundll32|regsvr32|mshta|wscript|cscript|%COMSPEC%|-enc)</field>
+    <description>Service $(win.eventdata.serviceName) installed with interpreter image path: $(win.eventdata.imagePath)</description>
+    <mitre>
+      <id>T1543.003</id>
+    </mitre>
+  </rule>
+
+  <!--
+    100104 - RESERVED: internal port scan from pfSense filterlog (T1046)
+
+    Not written yet, deliberately. This is the detection that closes the hole
+    Phase 4 measured - ET Open saw nothing on a 100-port nmap of the DC - so it
+    matters more than the four above. It will be a frequency rule over rule
+    87701 (pfSense firewall drop), grouped by srcip.
+
+    Blocked on: confirming block events reach the indexer at all. Decoding is
+    proven working via `pf` decoder at level 0 for pass traffic; 87701 is the
+    only pfSense rule above level 0, and it has not yet been observed firing.
+    Writing this rule before that measurement would repeat the mistake this
+    session already made twice.
+  -->
+
+</group>

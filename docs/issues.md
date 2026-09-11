@@ -165,10 +165,45 @@ Captured with `tcpdump -lni virbr-lab -A udp port 514`. Transport is **proven**.
 
 **Still unproven, and not to be claimed until measured:**
 
-- **Decoding.** The syslog header carries no hostname — it goes straight from
-  timestamp to `filterlog[56519]:`, where RFC3164 expects `TIMESTAMP HOSTNAME TAG:`.
-  Wazuh's pre-decoder may read the tag as the hostname. Settle with
-  `wazuh-logtest`, not by inspecting alerts.
+- **Decoding — still unknown. Two measurements attempted 2026-09-12, both void.**
+
+  **Retracted:** an entry here claimed decoding was broken because `wazuh-logtest`
+  returned decoder `FreePBX`, rule 70000. A second run with a hostname inserted
+  returned `No decoder matched`. Neither result is evidence, because both inputs
+  were pasted straight from `tcpdump` and still carried the `<134>` PRI prefix.
+  `remoted` strips the PRI before decoding, so no such line ever reaches the
+  decoders. Phase 1 printed `full event` and no `timestamp`, `hostname` or
+  `program_name` in **both** runs — pre-decoding failed on the malformed header
+  each time, and whatever matched afterwards matched an unparsed blob.
+
+  **Tenth instance of the 14/15/16 class, and the sharpest one.** The previous
+  nine were checks that reported absence without looking. This one ran, produced
+  detailed output, named a decoder, and was written into this file as a finding —
+  all from an input the system under test never receives. Verbose output is not
+  validity. **Before believing a logtest verdict, confirm the input matches what
+  the manager actually stores.**
+
+  **Measured correctly 2026-09-12, PRI stripped, hostname present.** Decoding is
+  not broken. Pre-decoding yields `timestamp`, `hostname: pfSense`,
+  `program_name: filterlog`; decoder **`pf`** matches and extracts the full field
+  set — `action: pass`, `srcip`, `dstip`, `srcport`, `dstport`, `protocol`, rule
+  `id`, `length`. Rule **87700** fires at **level 0**, group `pfsense`. Child rule
+  **87701 — pfSense firewall drop event** is tried and correctly does not match,
+  because the event is a pass.
+
+  **Level 0 writes no alert.** For pass traffic, absence from `wazuh-alerts-*` is
+  the designed outcome, not a fault. Every count of zero taken against pass events
+  in this issue's history was consistent with a perfectly working pipeline. The
+  decoder that three days were spent hunting was never missing and never wrong.
+
+  **The one thing still open: the wire has no hostname.** Captured events read
+  `<134>Sep 11 23:10:18 filterlog[56519]:` — timestamp straight to tag. The test
+  above only decodes because a hostname was typed in by hand. Pre-decoding needs
+  `TIMESTAMP HOSTNAME TAG:` to populate `program_name`, and the `pf` decoder keys
+  on `program_name`. Re-run the same line **without** `pfSense` to settle it:
+  `Sep 11 23:10:18 filterlog[56519]: 79,,,100000101,...`
+  If that fails to decode, the remaining defect is a pfSense hostname setting, and
+  the manager side needs no change at all.
 - **Indexing.** The captured events are all `match,pass`. Wazuh scores routine
   passes at level 0 and writes no alert, so a zero count in `wazuh-alerts-*` is
   correct behaviour here, not a failure. Generate a genuine **block** to test the

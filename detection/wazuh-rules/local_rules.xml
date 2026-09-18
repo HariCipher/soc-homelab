@@ -39,8 +39,22 @@
       - krbtgt        : the TGT itself, always present
       - names ending $: computer accounts, which legitimately use RC4 in places
   -->
+  <!--
+    if_sid 60106, measured 2026-09-18, not guessed.
+
+    The first version of this rule was atomic (decoded_as windows_eventchannel
+    only). It never fired. The manager API confirmed it was loaded and enabled
+    with every field condition parsed correctly, and a 4769 with
+    ticketEncryptionType 0x17 and serviceName svc_test was in the indexer -
+    a match on all three conditions. Stock rule 60106 alerted instead, at
+    level 3. local_rules.xml loads last and analysisd stops at the first
+    matching atomic rule, so this rule was never reached. Chaining to the
+    stock parent makes it a child, which is evaluated and overrides.
+
+    60106 is the measured owner of 4769 on this manager: 95 of 95 docs.
+  -->
   <rule id="100100" level="12">
-    <decoded_as>windows_eventchannel</decoded_as>
+    <if_sid>60106</if_sid>
     <field name="win.system.eventID">^4769$</field>
     <field name="win.eventdata.ticketEncryptionType">^0x17$</field>
     <field name="win.eventdata.serviceName" type="pcre2">^(?!krbtgt$)(?!.*\$$).+</field>
@@ -61,6 +75,42 @@
     Note: this fires on the account being *usable* this way, so it will also
     catch the test user created to prove it. That is correct, not a false
     positive - remove the flag after testing.
+
+    BLOCKED ON TELEMETRY, measured 2026-09-18. There are zero 4768 documents
+    in the entire retention. Not "none from the trigger" - none ever. 4769 is
+    collected (95 docs), but 4769 is Kerberos Service Ticket Operations and
+    4768 is Kerberos Authentication Service: a different audit subcategory,
+    and it is not enabled on DC01. This is why the runas trigger produced a
+    4625 instead of a 4768.
+
+    Consequence: this rule has no measured stock parent, because no 4768 has
+    ever reached the manager to show which rule owns it. The other three rules
+    were chained to parents measured from real docs. Guessing a parent here
+    would be inventing the one fact the chain depends on. So this rule stays
+    atomic and stays UNVERIFIED until 4768 is actually being collected - then
+    measure the owner and chain it the same way.
+
+    Update 2026-09-18: 4768 IS collected. auditpol on DC01 reports Kerberos
+    Authentication Service = Success and Failure, and a real AS-REQ sent from
+    the host (kinit nosuchuser@HOMELAB.LAN against KDC 192.168.50.10:88) landed
+    in wazuh-alerts-* 14 seconds later under stock rule 60104, status 0x6. The
+    earlier "0 docs all-time" reading was meaningless: the manager runs
+    logall/logall_json = no at log_alert_level 3, so wazuh-alerts-* holds alerts
+    and not events, and a *successful* 4768 alerts on nothing and is discarded.
+
+    60104 is the owner of the FAILURE case only. A pre-auth-disabled AS-REQ
+    succeeds, and a success 4768 has not been observed here - it produces no
+    alert under any stock rule, which is why this rule stayed atomic and why a
+    kinit as svc_test with pre-auth off left no doc behind. Do not chain this to
+    60104: that is the failure parent, and using it would be the guess this
+    repo keeps paying for.
+
+    To settle it, the manager needs somewhere to record non-alerting events:
+      /var/ossec/etc/ossec.conf -> <global><logall_json>yes</logall_json>
+      systemctl restart wazuh-manager
+    then re-run the AS-REP trigger and read /var/ossec/logs/archives/ for the
+    4768, measure its owner (possibly none), and chain accordingly. Costs disk;
+    see the RAM budget in ROADMAP before enabling it permanently.
   -->
   <rule id="100101" level="12">
     <decoded_as>windows_eventchannel</decoded_as>
@@ -75,22 +125,39 @@
   <!--
     100102 - Encoded PowerShell (T1059.001)
 
-    4104 carries the deobfuscated script block, which is why it is worth more
-    than 4688 command-line logging here: it survives most encoding. Matching
-    -enc / -EncodedCommand / FromBase64String catches the common launcher shape.
+    Rewritten 2026-09-18 against a measured event. The previous version matched
+    -enc / -EncodedCommand / FromBase64String against 4104's scriptBlockText,
+    on the reasoning that 4104 "survives encoding". It does - and that is
+    exactly why it could never fire. 4104 logs the *decoded* block: running
+    powershell.exe -enc on Get-Date writes the text "Get-Date". The encoding
+    marker lives on the command line, which 4104 does not carry. The rule was
+    searching decoded output for the artefact decoding removes. Script-block
+    logging was on the whole time (EnableScriptBlockLogging = 1); that was
+    never the blocker.
 
-    Known limit: this is a string match, and string matches are evadable
-    (whitespace, string concatenation, case tricks are all handled by the (?i)
-    and \s* but splitting the literal is not). It raises the cost of casual
-    obfuscation; it does not stop a deliberate operator. Documented rather than
-    overclaimed.
+    4688 carries commandLine. First attempt chained this to 92027 and did not
+    fire. Cause, measured 2026-09-18 15:31: 92027 owns **Sysmon Event ID 1** on
+    channel Microsoft-Windows-Sysmon/Operational, not 4688. The parent was read
+    off a rule.id aggregation over a commandLine query without checking the
+    eventID of those docs - so the rule required ^4688$ under a parent that
+    only ever carries EID 1, and could not match anything by construction.
 
-    Depends on: 4104 script-block logging, confirmed present in 02-telemetry.sh.
+    A single `powershell.exe -enc` run produces two separate documents:
+      4688 on Security                    -> stock 67027 (level 3)
+      EID 1 on Sysmon/Operational         -> stock 92027 (level 4)
+    67027 is the measured owner of the 4688 and is the correct parent. It fires
+    on every process creation (2691 docs); that is normal for an if_sid anchor -
+    the field match below is what narrows it, not the parent.
+
+    Known limit unchanged: a string match on the launcher shape. Case and
+    whitespace are handled; splitting the literal is not. It raises the cost of
+    casual obfuscation, it does not stop a deliberate operator. 4688 also only
+    sees the invocation, not the payload - pair with 4104 when reading an alert.
   -->
   <rule id="100102" level="10">
-    <decoded_as>windows_eventchannel</decoded_as>
-    <field name="win.system.eventID">^4104$</field>
-    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)(-enc\s|-encodedcommand|frombase64string)</field>
+    <if_sid>67027</if_sid>
+    <field name="win.system.eventID">^4688$</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(-enc\s|-e\s+[A-Za-z0-9+/=]{16,}|-encodedcommand|frombase64string)</field>
     <description>Encoded PowerShell executed on $(win.system.computer)</description>
     <mitre>
       <id>T1059.001</id>
@@ -111,8 +178,13 @@
     look exactly like "no attacks happened". 05-detections.sh checks for the
     channel first for that reason.
   -->
+  <!--
+    if_sid 61138: measured owner of 7045 on this manager, 2 of 2 docs -
+    including the KsID boot driver on 09-18 and the phase5test service
+    created by the trigger at 13:38:59.
+  -->
   <rule id="100103" level="12">
-    <decoded_as>windows_eventchannel</decoded_as>
+    <if_sid>61138</if_sid>
     <field name="win.system.eventID">^7045$</field>
     <field name="win.eventdata.imagePath" type="pcre2">(?i)(powershell|cmd\.exe|rundll32|regsvr32|mshta|wscript|cscript|%COMSPEC%|-enc)</field>
     <description>Service $(win.eventdata.serviceName) installed with interpreter image path: $(win.eventdata.imagePath)</description>
@@ -134,6 +206,37 @@
     only pfSense rule above level 0, and it has not yet been observed firing.
     Writing this rule before that measurement would repeat the mistake this
     session already made twice.
+
+    ==== CANDIDATE, NOT DEPLOYED ===========================================
+    Drafted offline so the next lab-up session is edit and test, not author
+    from scratch. Do not uncomment until ALL THREE are true:
+
+      1. pfSense has a hostname on the wire (issue 13) and a block event has
+         been captured with `tcpdump -lni virbr-lab -A udp port 514`.
+      2. That event is confirmed to pre-decode: `wazuh-logtest` run against
+         the line as the INDEXER stored it - not a hand-typed line (issue 7).
+      3. 87701 is observed firing in wazuh-alerts-* at least once. If the
+         parent id differs on 4.14.3, fix <if_matched_sid> before testing.
+
+    Every number below is a guess until 05-detections.sh shows it green:
+    frequency/timeframe are placeholders sized for a 100-port nmap (which is
+    what Phase 4 ran and ET Open missed), not measured against this network's
+    ambient block rate. Expect to tune both, and expect the LAN allow rule's
+    logging volume (see the Volume warning in docs/issues.md) to matter here.
+
+    <rule id="100104" level="10" frequency="15" timeframe="60">
+      <if_matched_sid>87701</if_matched_sid>
+      <same_source_ip />
+      <description>Internal port scan: $(srcip) hit 15+ blocked ports/services in 60s</description>
+      <mitre>
+        <id>T1046</id>
+      </mitre>
+    </rule>
+
+    Test, once deployed (from the host, no attacker VM):
+      nmap -Pn -p 1-100 192.168.50.10
+    then: ./scripts/verify/05-detections.sh
+    ========================================================================
   -->
 
 </group>
